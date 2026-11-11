@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import CallOverlay from "./CallOverlay.jsx";
 
+const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     credentials: "include",
     headers: {
@@ -30,6 +32,10 @@ async function api(path, options = {}) {
     },
   });
   if (response.status === 204) return null;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("The API returned a non-JSON response. Check VITE_API_URL and confirm the backend is deployed.");
+  }
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(data.error ?? "Something went wrong.");
@@ -555,7 +561,7 @@ function ChatApp({ user, onLogout, appError }) {
   }, [loadChats, loadPeople]);
 
   useEffect(() => {
-    const socket = io({ withCredentials: true });
+    const socket = io(apiBaseUrl || undefined, { withCredentials: true });
     setSocket(socket);
     socket.on("message:new", (message) => {
       setMessages((current) => {

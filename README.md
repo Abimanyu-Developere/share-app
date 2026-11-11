@@ -38,6 +38,8 @@ npm start
 
 Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `PORT`, and `CLIENT_ORIGIN` in the deployment environment. Serve the built `dist` directory with a static host or reverse proxy, and use HTTPS so session cookies remain secure.
 
+For a separate frontend and backend deployment, set `VITE_API_URL` to the backend's public origin in the frontend build environment, then rebuild and redeploy the frontend. Set the backend's `CLIENT_ORIGIN` to the exact frontend origin so API and Socket.IO requests are allowed. For cross-site deployments, set `COOKIE_SAME_SITE=none` (which requires HTTPS); browsers may block cross-site cookies, so using frontend and backend domains on the same site is recommended. Cloudflare Pages hosts the static frontend only; deploy the Node.js API and PostgreSQL database separately.
+
 ## Calls and screen sharing
 
 Start a voice or video call from a conversation header. Group calls support up to six people. During a call, use **Share screen** to present a screen or window; the browser will ask you to choose what to share. Calls require camera and microphone permission, and screen sharing requires a secure browser context (localhost or HTTPS).
