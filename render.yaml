@@ -1,0 +1,27 @@
+databases:
+  - name: orbit-chat-db
+    databaseName: chatapp
+    user: orbit
+    plan: free
+
+services:
+  - type: web
+    name: orbit-chat-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: orbit-chat-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN
+        value: https://share-app.prabaharan-p.workers.dev
+      - key: COOKIE_SAME_SITE
+        value: none

@@ -38,7 +38,16 @@ npm start
 
 Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `PORT`, and `CLIENT_ORIGIN` in the deployment environment. Serve the built `dist` directory with a static host or reverse proxy, and use HTTPS so session cookies remain secure.
 
-For a separate frontend and backend deployment, set `VITE_API_URL` to the backend's public origin in the frontend build environment, then rebuild and redeploy the frontend. Set the backend's `CLIENT_ORIGIN` to the exact frontend origin so API and Socket.IO requests are allowed. For cross-site deployments, set `COOKIE_SAME_SITE=none` (which requires HTTPS); browsers may block cross-site cookies, so using frontend and backend domains on the same site is recommended. Cloudflare Pages hosts the static frontend only; deploy the Node.js API and PostgreSQL database separately.
+### Deploy with Cloudflare and Render
+
+Cloudflare hosts the static frontend; the Node.js API and PostgreSQL database must run separately. This repository includes a Render Blueprint in `render.yaml` for the API and database.
+
+1. In Render, create a new Blueprint from this GitHub repository and deploy it. The Blueprint generates a `JWT_SECRET`, connects the API to PostgreSQL, and allows the Cloudflare site origin. The free PostgreSQL plan is for testing and may have usage or expiration limits; check Render's current plan details before storing important data.
+2. In your Cloudflare Workers & Pages project, add the build environment variable `VITE_API_URL` with the public URL Render assigned to `orbit-chat-api` (for example, `https://orbit-chat-api.onrender.com`). Set it for production and preview if you use both, then trigger a fresh deployment so Vite includes it in the frontend build.
+3. If your Cloudflare site uses a different domain, update Render's `CLIENT_ORIGIN` to that exact origin and redeploy the API. The Blueprint sets `COOKIE_SAME_SITE=none` for cross-site session cookies; both sites must use HTTPS.
+4. Open `https://<your-api-host>/api/health`. It should return JSON such as `{"status":"ok"}`. Then reload the Cloudflare site and try registering an account.
+
+Do not set `VITE_API_URL` to the Cloudflare site URL: it must point to the Render API service. Keep database credentials and `JWT_SECRET` in Render environment settings, not in Cloudflare frontend variables.
 
 ## Calls and screen sharing
 
