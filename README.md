@@ -55,4 +55,4 @@ Start a voice or video call from a conversation header. Group calls support up t
 
 Calls use peer-to-peer WebRTC with a public STUN server. Some networks require a TURN relay to connect; production deployments should configure a trusted TURN service and review its access, privacy, and cost policies. The development setup does not include TURN.
 
-Messages are stored in PostgreSQL and delivered live to connected members. This MVP does not provide end-to-end encryption, file uploads, push notifications, or message editing/deletion. Do not use it for sensitive conversations without a security review and a production deployment plan.
+Messages and file attachments are stored in PostgreSQL and delivered live to connected members. Attachments accept any file type, are downloaded rather than rendered inline, and are limited to 50 MB each; storing files in PostgreSQL can consume database capacity quickly. This MVP does not provide end-to-end encryption, push notifications, or message editing/deletion. Do not use it for sensitive conversations without a security review and a production deployment plan.

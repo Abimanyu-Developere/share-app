@@ -479,6 +479,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .message-mine .message-bubble { border-color: #e2dafc; border-radius: 14px 14px 4px 14px; background: #f0ecff; }
 .message-bubble p { margin: 0; color: #535267; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
 .message-mine .message-bubble p { color: #484064; }
+.message-attachment { display: flex; max-width: 290px; min-width: 0; align-items: center; gap: 9px; padding: 2px; border: 0; background: transparent; color: var(--purple); text-align: left; cursor: pointer; }
+.message-attachment > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.message-attachment strong { color: #484064; font-size: 11px; overflow-wrap: anywhere; }
+.message-attachment small { color: #88859a; font-size: 9px; }
+.message-attachment:hover strong { text-decoration: underline; }
 .message-time { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; color: #aaa9b7; font-size: 8px; white-space: nowrap; }
 .message-mine .message-time svg { color: #8b70e5; }
 .composer { padding: 13px clamp(18px, 6vw, 95px) 16px; }
@@ -494,8 +499,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   box-shadow: 0 4px 16px #2b204a08;
 }
 .composer-box:focus-within { border-color: #c9bdf5; box-shadow: 0 0 0 3px #7757e80b; }
+.file-input { display: none; }
 .composer-tool { display: grid; width: 31px; height: 34px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 9px; background: transparent; color: #aaa8b7; cursor: pointer; }
 .composer-tool:hover { background: #f6f3ff; color: var(--purple); }
+.composer-tool:disabled { cursor: progress; opacity: .55; }
 .composer textarea { width: 100%; min-height: 34px; max-height: 130px; align-self: center; resize: none; border: 0; outline: none; color: #414055; font-size: 12px; line-height: 1.5; }
 .composer textarea::placeholder { color: #b0afbb; }
 .send-button { display: grid; width: 35px; height: 35px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 11px; background: var(--purple); color: white; cursor: pointer; transition: background .15s ease, transform .15s ease; }

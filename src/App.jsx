@@ -6,9 +6,11 @@ import {
   Check,
   CheckCheck,
   CircleHelp,
+  Download,
   MessageCircle,
   MessageSquarePlus,
   MoreHorizontal,
+  Paperclip,
   Phone,
   Search,
   Send,
@@ -24,6 +26,7 @@ const apiBaseUrl = (
   import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? "https://orbit-chat-api.onrender.com" : "")
 ).replace(/\/+$/, "");
+const maxAttachmentBytes = 50 * 1024 * 1024;
 
 async function api(path, options = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -217,6 +220,12 @@ function formatTime(dateString) {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function Sidebar({
   user,
   chats,
@@ -396,10 +405,25 @@ function GroupModal({ people, onClose, onCreate }) {
   );
 }
 
-function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, loading, error }) {
+function ChatView({
+  chat,
+  user,
+  online,
+  messages,
+  onSend,
+  onSendFile,
+  onDownloadFile,
+  onBack,
+  onStartCall,
+  loading,
+  error,
+}) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const endRef = useRef(null);
+  const fileInputRef = useRef(null);
   const title = chatName(chat);
   const person = chat.kind === "direct" ? chat.members?.[0] : null;
 
@@ -415,6 +439,27 @@ function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, l
       if (await onSend(text.trim())) setText("");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function selectFile(event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    setUploadError("");
+    if (!file.size) {
+      setUploadError("Empty files cannot be sent.");
+      return;
+    }
+    if (file.size > maxAttachmentBytes) {
+      setUploadError("Files must be 50 MB or smaller.");
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      await onSendFile(file);
+    } finally {
+      setUploadingFile(false);
     }
   }
 
@@ -461,7 +506,7 @@ function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, l
           <span>Say hello and let the conversation find its orbit.</span>
         </div>
         {loading && <div className="message-status">Loading messages…</div>}
-        {error && <div className="message-error">{error}</div>}
+        {(uploadError || error) && <div className="message-error">{uploadError || error}</div>}
         {messages.map((message, index) => {
           const mine = message.sender.id === user.id;
           const previous = messages[index - 1];
@@ -474,7 +519,21 @@ function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, l
               <div className="message-content">
                 {!mine && chat.kind === "group" && !grouped && <span className="message-author">{message.sender.displayName}</span>}
                 <div className="message-bubble">
-                  <p>{message.text}</p>
+                  {message.attachment ? (
+                    <button
+                      className="message-attachment"
+                      onClick={() => onDownloadFile(message)}
+                      title={`Download ${message.attachment.name}`}
+                      type="button"
+                    >
+                      <Paperclip size={17} />
+                      <span>
+                        <strong>{message.attachment.name}</strong>
+                        <small>{formatFileSize(message.attachment.size)} · Download</small>
+                      </span>
+                      <Download size={15} />
+                    </button>
+                  ) : message.text ? <p>{message.text}</p> : null}
                   <span className="message-time">
                     {formatTime(message.created_at)}
                     {mine && <CheckCheck size={14} />}
@@ -488,6 +547,23 @@ function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, l
       </div>
       <form className="composer" onSubmit={submit}>
         <div className="composer-box">
+          <input
+            ref={fileInputRef}
+            aria-label="Choose a file"
+            className="file-input"
+            onChange={selectFile}
+            type="file"
+          />
+          <button
+            className="composer-tool"
+            disabled={sending || uploadingFile}
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach a file (up to 50 MB)"
+            type="button"
+            aria-label="Attach a file"
+          >
+            <Paperclip size={18} />
+          </button>
           <button className="composer-tool" type="button" aria-label="Emoji picker (coming soon)" title="Emoji picker coming soon"><Smile size={19} /></button>
           <textarea
             aria-label="Write a message"
@@ -504,11 +580,13 @@ function ChatView({ chat, user, online, messages, onSend, onBack, onStartCall, l
             value={text}
           />
           {text.length > 3500 && <span className="character-count">{4000 - text.length}</span>}
-          <button className="send-button" disabled={!text.trim() || sending} type="submit" aria-label="Send message">
+          <button className="send-button" disabled={!text.trim() || sending || uploadingFile} type="submit" aria-label="Send message">
             {sending ? <Send size={17} /> : <ArrowUp size={18} />}
           </button>
         </div>
-        <span className="composer-hint">Enter to send <i /> Shift + Enter for a new line</span>
+        <span className="composer-hint">
+          {uploadingFile ? "Uploading file…" : <>Enter to send <i /> Shift + Enter for a new line</>}
+        </span>
       </form>
     </section>
   );
@@ -663,6 +741,54 @@ function ChatApp({ user, onLogout, appError }) {
     }
   }
 
+  async function sendFile(file) {
+    setMessageError("");
+    try {
+      const data = await api(`/api/chats/${selectedChatId}/attachments`, {
+        method: "POST",
+        body: file,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-File-Name": encodeURIComponent(file.name),
+        },
+      });
+      setMessages((current) => current.some((message) => message.id === data.message.id)
+        ? current
+        : [...current, data.message]);
+      loadChats().catch((error) => setMessageError(error.message));
+      return true;
+    } catch (error) {
+      setMessageError(error.message);
+      return false;
+    }
+  }
+
+  async function downloadFile(message) {
+    setMessageError("");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/chats/${message.chat_id}/messages/${message.id}/file`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const data = await response.json();
+          throw new Error(data.error ?? "Could not download the file.");
+        }
+        throw new Error("Could not download the file.");
+      }
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = message.attachment.name;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      setMessageError(error.message);
+    }
+  }
+
   function startCall(mode) {
     if (!socket?.connected) {
       setMessageError("Connecting to the call service. Please try again in a moment.");
@@ -706,6 +832,8 @@ function ChatApp({ user, onLogout, appError }) {
           loading={messageLoading}
           messages={messages}
           onBack={() => setSelectedChatId(null)}
+          onDownloadFile={downloadFile}
+          onSendFile={sendFile}
           onStartCall={startCall}
           onSend={sendMessage}
           online={online}

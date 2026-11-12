@@ -13,6 +13,7 @@ import { Server } from "socket.io";
 
 const { Pool } = pg;
 const port = Number(process.env.PORT ?? 3001);
+const maxAttachmentBytes = 50 * 1024 * 1024;
 const jwtSecret = process.env.JWT_SECRET;
 const cookieName = "orbit_session";
 const tokenLifetime = "7d";
@@ -45,6 +46,11 @@ app.use(helmet());
 app.use(cors({ origin: clientOrigin, credentials: true }));
 app.use(express.json({ limit: "32kb" }));
 app.use(cookieParser());
+
+const attachmentBodyParser = express.raw({
+  type: "application/octet-stream",
+  limit: maxAttachmentBytes,
+});
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -201,7 +207,11 @@ app.get("/api/users", authenticate, asyncRoute(async (req, res) => {
 app.get("/api/chats", authenticate, asyncRoute(async (req, res) => {
   const result = await pool.query(
     `SELECT c.id, c.name, c.kind, c.created_at,
-       (SELECT m.text FROM messages m WHERE m.chat_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+       (SELECT COALESCE(m.text, '[File] ' || a.file_name)
+        FROM messages m
+        LEFT JOIN message_attachments a ON a.message_id = m.id
+        WHERE m.chat_id = c.id
+        ORDER BY m.created_at DESC LIMIT 1) AS last_message,
        (SELECT m.created_at FROM messages m WHERE m.chat_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
        COALESCE((
          SELECT json_agg(json_build_object(
@@ -308,6 +318,9 @@ app.get("/api/chats/:chatId/messages", authenticate, asyncRoute(async (req, res)
   }
   const result = await pool.query(
     `SELECT m.id, m.chat_id, m.text, m.created_at,
+       CASE WHEN a.message_id IS NULL THEN NULL
+         ELSE json_build_object('name', a.file_name, 'size', a.file_size)
+       END AS attachment,
        json_build_object(
          'id', u.id, 'username', u.username, 'displayName', u.display_name
        ) AS sender
@@ -316,6 +329,7 @@ app.get("/api/chats/:chatId/messages", authenticate, asyncRoute(async (req, res)
        ORDER BY created_at DESC LIMIT 100
      ) m
      JOIN users u ON u.id = m.sender_id
+     LEFT JOIN message_attachments a ON a.message_id = m.id
      ORDER BY m.created_at ASC`,
     [req.params.chatId],
   );
@@ -341,11 +355,89 @@ app.post("/api/chats/:chatId/messages", authenticate, asyncRoute(async (req, res
   res.status(201).json({ message });
 }));
 
+app.post(
+  "/api/chats/:chatId/attachments",
+  authenticate,
+  asyncRoute(async (req, res, next) => {
+    if (!(await hasChatAccess(req.params.chatId, req.user.id))) {
+      return res.status(404).json({ error: "Conversation not found." });
+    }
+    next();
+  }),
+  attachmentBodyParser,
+  asyncRoute(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: "Choose a non-empty file to send." });
+    }
+
+    let fileName;
+    try {
+      fileName = decodeURIComponent(req.get("x-file-name") ?? "");
+    } catch {
+      return res.status(400).json({ error: "The file name is invalid." });
+    }
+    fileName = fileName
+      .replace(/\\/g, "/")
+      .split("/")
+      .pop()
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim();
+    if (!fileName || fileName.length > 255) {
+      return res.status(400).json({ error: "File names must be between 1 and 255 characters." });
+    }
+
+    const message = await withTransaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO messages (chat_id, sender_id, text)
+         VALUES ($1, $2, NULL)
+         RETURNING id, chat_id, text, created_at`,
+        [req.params.chatId, req.user.id],
+      );
+      const row = result.rows[0];
+      await client.query(
+        `INSERT INTO message_attachments (message_id, file_name, file_size, data)
+         VALUES ($1, $2, $3, $4)`,
+        [row.id, fileName, req.body.length, req.body],
+      );
+      return {
+        ...row,
+        attachment: { name: fileName, size: req.body.length },
+        sender: publicUser(req.user),
+      };
+    });
+
+    io.to(req.params.chatId).emit("message:new", message);
+    res.status(201).json({ message });
+  }),
+);
+
+app.get("/api/chats/:chatId/messages/:messageId/file", authenticate, asyncRoute(async (req, res) => {
+  if (!(await hasChatAccess(req.params.chatId, req.user.id))) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+  const result = await pool.query(
+    `SELECT a.file_name, a.data
+     FROM message_attachments a
+     JOIN messages m ON m.id = a.message_id
+     WHERE m.id = $1 AND m.chat_id = $2`,
+    [req.params.messageId, req.params.chatId],
+  );
+  if (!result.rowCount) return res.status(404).json({ error: "File not found." });
+
+  res.attachment(result.rows[0].file_name);
+  res.type("application/octet-stream");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.send(result.rows[0].data);
+}));
+
 app.use((req, res) => {
   res.status(404).json({ error: "Not found." });
 });
 
 app.use((error, _req, res, _next) => {
+  if (error.status === 413 && error.type === "entity.too.large") {
+    return res.status(413).json({ error: "Files must be 50 MB or smaller." });
+  }
   console.error(error);
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
@@ -651,6 +743,13 @@ async function start() {
       sender_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       text varchar(4000) NOT NULL CHECK (length(trim(text)) > 0),
       created_at timestamptz NOT NULL DEFAULT now()
+    );
+    ALTER TABLE messages ALTER COLUMN text DROP NOT NULL;
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      message_id uuid PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      file_name varchar(255) NOT NULL,
+      file_size integer NOT NULL CHECK (file_size > 0 AND file_size <= 52428800),
+      data bytea NOT NULL
     );
     CREATE INDEX IF NOT EXISTS messages_chat_created_idx
       ON messages(chat_id, created_at DESC);
