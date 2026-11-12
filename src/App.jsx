@@ -20,7 +20,10 @@ import {
 } from "lucide-react";
 import CallOverlay from "./CallOverlay.jsx";
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+const apiBaseUrl = (
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? "https://orbit-chat-api.onrender.com" : "")
+).replace(/\/+$/, "");
 
 async function api(path, options = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {

@@ -43,7 +43,7 @@ Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `PORT`, and `CLIENT_ORI
 Cloudflare hosts the static frontend; the Node.js API and PostgreSQL database must run separately. This repository includes a Render Blueprint in `render.yaml` for the API and database.
 
 1. In Render, create a new Blueprint from this GitHub repository and deploy it. The Blueprint generates a `JWT_SECRET`, connects the API to PostgreSQL, and allows the Cloudflare site origin. The free PostgreSQL plan is for testing and may have usage or expiration limits; check Render's current plan details before storing important data.
-2. In your Cloudflare Workers & Pages project, add the build environment variable `VITE_API_URL` with the public URL Render assigned to `orbit-chat-api` (for example, `https://orbit-chat-api.onrender.com`). Set it for production and preview if you use both, then trigger a fresh deployment so Vite includes it in the frontend build.
+2. The production frontend defaults to `https://orbit-chat-api.onrender.com`, the API URL for this Render Blueprint. If Render assigns a different URL or you use another API host, set the Cloudflare Workers & Pages build variable `VITE_API_URL` to that public API URL for production (and preview if needed), then trigger a fresh deployment.
 3. If your Cloudflare site uses a different domain, update Render's `CLIENT_ORIGIN` to that exact origin and redeploy the API. The Blueprint sets `COOKIE_SAME_SITE=none` for cross-site session cookies; both sites must use HTTPS.
 4. Open `https://<your-api-host>/api/health`. It should return JSON such as `{"status":"ok"}`. Then reload the Cloudflare site and try registering an account.
 
