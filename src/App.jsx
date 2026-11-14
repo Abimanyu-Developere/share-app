@@ -24,16 +24,11 @@ import CallOverlay from "./CallOverlay.jsx";
 
 const apiBaseUrl = (
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? "https://orbit-chat-api.onrender.com" : "__UNSET__")
+  (import.meta.env.PROD ? "https://orbit-chat-api.onrender.com" : "")
 ).replace(/\/+$/, "");
 const maxAttachmentBytes = 50 * 1024 * 1024;
 
 async function api(path, options = {}) {
-  if (apiBaseUrl === "__UNSET__") {
-    throw new Error(
-      "API base URL is not configured. Set VITE_API_URL to your Render API URL (for example https://orbit-chat-api.onrender.com) in the deployment environment — do not point it at the Cloudflare site URL."
-    );
-  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     credentials: "include",
@@ -45,7 +40,7 @@ async function api(path, options = {}) {
   if (response.status === 204) return null;
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    throw new Error("The API returned a non-JSON response. Confirm VITE_API_URL points at the backend API, not the frontend host.");
+    throw new Error("The API returned a non-JSON response. Check VITE_API_URL and confirm the backend is deployed.");
   }
   const data = await response.json();
   if (!response.ok) {
