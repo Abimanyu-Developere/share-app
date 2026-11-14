@@ -43,9 +43,14 @@ Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `PORT`, and `CLIENT_ORI
 Cloudflare hosts the static frontend; the Node.js API and PostgreSQL database must run separately. This repository includes a Render Blueprint in `render.yaml` for the API and database.
 
 1. In Render, create a new Blueprint from this GitHub repository and deploy it. The Blueprint generates a `JWT_SECRET`, connects the API to PostgreSQL, and allows the Cloudflare site origin. The free PostgreSQL plan is for testing and may have usage or expiration limits; check Render's current plan details before storing important data.
-2. The production frontend defaults to `https://orbit-chat-api.onrender.com`, the API URL for this Render Blueprint. If Render assigns a different URL or you use another API host, set the Cloudflare Workers & Pages build variable `VITE_API_URL` to that public API URL for production (and preview if needed), then trigger a fresh deployment.
-3. If your Cloudflare site uses a different domain, update Render's `CLIENT_ORIGIN` to that exact origin and redeploy the API. The Blueprint sets `COOKIE_SAME_SITE=none` for cross-site session cookies; both sites must use HTTPS.
-4. Open `https://<your-api-host>/api/health`. It should return JSON such as `{"status":"ok"}`. Then reload the Cloudflare site and try registering an account.
+
+2. The production frontend defaults to `https://orbit-chat-api.onrender.com`, the API URL for this Render Blueprint. If Render assigns a different URL or you use another API host, set the Cloudflare Workers & Pages build variable `VITE_API_URL` to the Render **API service** URL (for example `https://my-api.onrender.com`) for production (and preview if needed), then trigger a fresh deployment.
+
+3. For file attachments to display, `VITE_API_URL` must be set in Cloudflare's **environment** (Workers & Pages build vars), not in a local `.env` file. Local `.env` values are not baked into a Cloudflare frontend build. `NODE_ENV`/`PROD` is not reliably `true` on Cloudflare, so if `VITE_API_URL` is missing the app falls back to an empty API base URL and looks for the API on the Cloudflare site origin; message/file uploads and attachment downloads then fail silently and attachments never appear.
+
+4. If your Cloudflare site uses a different domain, update Render's `CLIENT_ORIGIN` to that exact origin and redeploy the API. The Blueprint sets `COOKIE_SAME_SITE=none` for cross-site session cookies; both sites must use HTTPS.
+
+5. Open `https://<your-api-host>/api/health`. It should return JSON such as `{"status":"ok"}`. Then reload the Cloudflare site and try registering an account.
 
 Do not set `VITE_API_URL` to the Cloudflare site URL: it must point to the Render API service. Keep database credentials and `JWT_SECRET` in Render environment settings, not in Cloudflare frontend variables.
 
